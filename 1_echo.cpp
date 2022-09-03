@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     }
 
     if (next_line) {
-        printf("\n");
+        putchar('\n');
     }
 
     return 0;
