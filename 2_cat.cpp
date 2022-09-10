@@ -32,11 +32,13 @@ int cat(int fd_in, int fd_out) {
     const size_t buf_size = 1024;
     char buffer[buf_size];
 
-    ssize_t readsize = 0;
-    do {
-        readsize = read(fd_in, buffer, buf_size);
+    int error = 0;
+
+    while (true) {
+        ssize_t readsize = read(fd_in, buffer, buf_size);
         if (readsize < 0) {
             fprintf(stderr, "cannot read file from file descriptor %d: %s\n", fd_in, strerror(errno));
+            error = -1;
             break;
         } else if (readsize == 0) {
             break;
@@ -45,24 +47,44 @@ int cat(int fd_in, int fd_out) {
         ssize_t writesize = safe_write(fd_out, buffer, readsize);
         if (writesize < 0) {
             fprintf(stderr, "cannot write file to fd = %d: %s\n", fd_out, strerror(errno));
+            error = -1;
             break;
         } else if (readsize != writesize) {
             fprintf(stderr, "cannot write file to fd = %d, readsize != writesize: %s\n", fd_out, strerror(errno));
+            error = -1;
             break;
         }
-    } while (true);
+    };
 
-    return 0;
+    return error;
 }
 
 int main(int argc, char **argv) {
     if (argc > 1) {
-        printf("cannot get any arguments now.\n");
+        for (int index = 1; index < argc; ++index) {
+            int fd = open(argv[index], O_RDONLY);
+            if (fd < 0) {
+                fprintf(stderr, "cannot open file with name %s: %s\n", argv[index], strerror(errno));
+                return EXIT_FAILURE;
+            }
 
-        return EXIT_SUCCESS;
+            int result = cat(fd, STDOUT_FILENO);
+            if (result < 0) {
+                return EXIT_FAILURE;
+            }
+
+            result = close(fd);
+            if (result < 0) {
+                fprintf(stderr, "cannot close file with name %s: %s\n", argv[index], strerror(errno));
+                return EXIT_FAILURE;
+            }
+        }
+    } else {
+        int result = cat(STDIN_FILENO, STDOUT_FILENO);
+        if (result < 0) {
+            return EXIT_FAILURE;
+        }
     }
 
-    cat(0, 1);
-
-    return 0;
+    return EXIT_SUCCESS;
 }
