@@ -11,6 +11,23 @@
 
 #include <string.h>
 
+ssize_t safe_write(int fd_out, const char *buffer, ssize_t writesize) {
+    ssize_t result_ws = 0;
+
+    while (result_ws != writesize) {
+        ssize_t current = write(fd_out, buffer + result_ws, writesize - result_ws);
+        if (current < 0) {
+            return -1;
+        } else if (current == 0) {
+            break;
+        }
+
+        result_ws += current;
+    }
+
+    return result_ws;
+}
+
 int cat(int fd_in, int fd_out) {
     const size_t buf_size = 1024;
     char buffer[buf_size];
@@ -21,13 +38,11 @@ int cat(int fd_in, int fd_out) {
         if (readsize < 0) {
             fprintf(stderr, "cannot read file from file descriptor %d: %s\n", fd_in, strerror(errno));
             break;
-        }
-        else
-        if (readsize == 0) {
+        } else if (readsize == 0) {
             break;
         }
 
-        ssize_t writesize = write(fd_out, buffer, readsize);
+        ssize_t writesize = safe_write(fd_out, buffer, readsize);
         if (writesize < 0) {
             fprintf(stderr, "cannot write file to fd = %d: %s\n", fd_out, strerror(errno));
             break;
@@ -42,7 +57,7 @@ int cat(int fd_in, int fd_out) {
 
 int main(int argc, char **argv) {
     if (argc > 1) {
-        printf("This program cannot get any arguments now.\n");
+        printf("cannot get any arguments now.\n");
 
         return EXIT_SUCCESS;
     }
