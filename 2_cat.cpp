@@ -9,16 +9,33 @@
 #include <stddef.h>
 #include <stdlib.h>
 
-int cat(int fd_int, int fd_out) {
+#include <string.h>
+
+int cat(int fd_in, int fd_out) {
     const size_t buf_size = 1024;
     char buffer[buf_size];
 
-    int readsize = 0;
+    ssize_t readsize = 0;
     do {
-        readsize = read(fd_int, buffer, buf_size);
+        readsize = read(fd_in, buffer, buf_size);
+        if (readsize < 0) {
+            fprintf(stderr, "cannot read file from file descriptor %d: %s\n", fd_in, strerror(errno));
+            break;
+        }
+        else
+        if (readsize == 0) {
+            break;
+        }
 
-        write(fd_out, buffer, readsize);
-    } while (readsize > 0);
+        ssize_t writesize = write(fd_out, buffer, readsize);
+        if (writesize < 0) {
+            fprintf(stderr, "cannot write file to fd = %d: %s\n", fd_out, strerror(errno));
+            break;
+        } else if (readsize != writesize) {
+            fprintf(stderr, "cannot write file to fd = %d, readsize != writesize: %s\n", fd_out, strerror(errno));
+            break;
+        }
+    } while (true);
 
     return 0;
 }
