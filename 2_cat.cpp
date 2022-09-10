@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
             int fd = open(argv[index], O_RDONLY);
             if (fd < 0) {
                 fprintf(stderr, "cannot open file with name %s: %s\n", argv[index], strerror(errno));
-                return EXIT_FAILURE;
+                continue;
             }
 
             int result = cat(fd, STDOUT_FILENO);
