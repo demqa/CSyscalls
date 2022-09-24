@@ -69,6 +69,7 @@ int main(int argc, char **argv) {
         getgrouplist(argv[1], gid, groups, &nelems);
 
         print_groups(groups, (size_t) nelems);
+        free(groups);
 
         return EXIT_SUCCESS;
     }
