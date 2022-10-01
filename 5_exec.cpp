@@ -15,9 +15,6 @@ int main(int argc, char **argv)
 {
     timeval time;
 
-    gettimeofday(&time, nullptr);
-    int start = time.tv_usec;
-
     if (fork() == 0)
     {
         int status = execvp(argv[1], argv + 1);
@@ -31,12 +28,22 @@ int main(int argc, char **argv)
         return EXIT_SUCCESS;
     }
 
-    int pid = waitpid(-1, 0, 0);
+    timeval start;
+    gettimeofday(&start, nullptr);
 
-    gettimeofday(&time, nullptr);
-    int end   = time.tv_usec;
+    int status;
+    int pid = waitpid(-1, &status, 0);
 
-    printf("exec %s. lasts for %u microseconds.\n", argv[1], end - start);
+    timeval end;
+    gettimeofday(&end, nullptr);
 
-    return 0;
+    timeval result;
+    timersub(&end, &start, &result);
+
+    unsigned long long diff = result.tv_sec * 1000000u + result.tv_usec;
+
+    if (status == 0)
+        printf("exec %s. lasts for %llu microseconds.\n", argv[1], diff);
+
+    return EXIT_SUCCESS;
 }
