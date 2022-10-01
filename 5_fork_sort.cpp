@@ -2,18 +2,16 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <sys/wait.h>
 
 int main(int argc, char **argv)
 {
-    int max = 0;
     const unsigned multiplier = 10000u;
 
     for (int i = 1; i < argc; ++i)
     {
         int num = atoi(argv[i]);
         assert(num >= 0);
-
-        if (num > max) max = num;
 
         int process = fork();
         if (process == 0)
@@ -26,7 +24,12 @@ int main(int argc, char **argv)
         }
     }
 
-    usleep(multiplier * (max + 1));
+    while (argc > 1) {
+        int status;
+        int pid = waitpid(-1, &status, 0);
+
+        argc--;
+    }
     putchar('\n');
 
     return 0;
