@@ -38,9 +38,9 @@ struct statistic
 
 enum states
 {
-    eof = 0,
-    in_word,
-    is_space,
+    EOF_STATE = 0,
+    IS_WORD,
+    IS_SPACE,
 };
 
 const static size_t BUFF_SIZE = 4096;
@@ -58,7 +58,7 @@ void proceed(const char buf[BUFF_SIZE], size_t size, statistic* stat)
 {
     assert(stat != nullptr);
 
-    int cond = is_space;
+    int cond = IS_SPACE;
     size_t i = 0;
 
     while (cond && i < size)
@@ -66,12 +66,12 @@ void proceed(const char buf[BUFF_SIZE], size_t size, statistic* stat)
         char sym = buf[i];
 
         switch (cond) {
-            case is_space:
+            case IS_SPACE:
                 if (sym == '\n') stat->line_count++;
 
                 if (!isspace(sym))
                 {
-                    cond = in_word;
+                    cond = IS_WORD;
                     stat->word_count++;
                     continue;
                 }
@@ -79,10 +79,10 @@ void proceed(const char buf[BUFF_SIZE], size_t size, statistic* stat)
                 i++;
                 break;
 
-            case in_word:
+            case IS_WORD:
                 if (isspace(sym))
                 {
-                    cond = is_space;
+                    cond = IS_SPACE;
                     continue;
                 }
 
