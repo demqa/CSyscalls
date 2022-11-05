@@ -10,6 +10,13 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#define DEBUG(arg) \
+{}
+// do { fprintf(stderr, "%03d: %s = %d\n", __LINE__, #arg, arg); } while(0)
+#define DEBUGS(arg) \
+{}
+// do { fprintf(stderr, "%03d: %s = %s\n", __LINE__, #arg, arg); } while(0)
+
 /*
 
 ls
@@ -53,34 +60,41 @@ public:
 };
 
 static Mode mode;
+static char buf[4096];
+static size_t length;
 
 void show(const dirent* entry)
 {
     if (entry->d_name[0] == '.' && !mode.check(Mode::ALL))
         return;
 
-    const char *type = "undefined";
-    if (entry->d_type == DT_DIR)
-        type = "dir ";
-    if (entry->d_type == DT_REG)
-        type = "file";
+    const char *type = "undef";
+    if (entry->d_type == DT_DIR) type = "dir  ";
+    if (entry->d_type == DT_REG) type = "file ";
+    if (entry->d_type == DT_LNK) type = "link ";
 
     printf("%s: %s\n", type, entry->d_name);
 }
 
-static char buf[4096];
-static size_t length;
-
 void ls(const char* path, size_t number) // full path
 {
-    if (number > 1)
+    static size_t launch_time = 0;
+
+    if (number > 1 || mode.check(Mode::RECURSIVE))
+    {
+        if (launch_time != 0)
+            putchar('\n');
         printf("%s:\n", path);
+    }
+
+    launch_time++;
 
     struct stat stat_buf;
 
     int status = stat(path, &stat_buf);
     if (status == -1)
     {
+        DEBUGS(path);
         fprintf(stderr, "myls: cannot access %s: %s\n", path, strerror(errno));
         return;
     }
@@ -90,9 +104,13 @@ void ls(const char* path, size_t number) // full path
     //     // show();
     // }
 
+    DEBUG(status);
+
     DIR *dir = opendir(path);
     if (dir == nullptr)
     {
+        DEBUGS(path);
+        fprintf(stderr, "myls: cannot access %s: %s\n", path, strerror(errno));
         return;
     }
 
@@ -102,19 +120,39 @@ void ls(const char* path, size_t number) // full path
     while ((entry = readdir(dir)) != nullptr)
     {
         show(entry);
+    }
 
-        if (mode.check(Mode::RECURSIVE))
+    rewinddir(dir);
+
+    while ((entry = readdir(dir)) != nullptr)
+    {
+        if (mode.check(Mode::RECURSIVE) && entry->d_type == DT_DIR)
         {
+            if (entry->d_name[0] == '.' && !mode.check(Mode::ALL))
+                continue;
+
+            DEBUGS(entry->d_name);
+
             size_t add_len = strlen(entry->d_name);
 
-            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            DEBUG(add_len);
+
+            if (strcmp(entry->d_name, ".")  == 0 ||
+                strcmp(entry->d_name, "..") == 0)
                 return;
 
             add_len++;
 
+            DEBUG(add_len);
+            DEBUGS(buf);
+
+            DEBUG(length);
             buf[length] = '/';
+            DEBUGS(buf);
             strcpy(buf + length + 1, entry->d_name);
+            DEBUGS(buf);
             length += add_len;
+            DEBUGS(buf);
 
             ls(buf, 2);
 
@@ -153,13 +191,20 @@ int main(int argc, char **argv)
         }
     }
 
-    if (argc == 1)
+    DEBUG(argc);
+    DEBUG(last_option);
+
+    DEBUG(mode.check(Mode::ALL));
+
+    if (argc == last_option)
     {
+        DEBUGS(buf);
         strcpy(buf, ".");
+        length++;
+        DEBUGS(buf);
         ls(buf, 1);
     }
-    else
-    {
+    else {
         int first_arg = last_option;
         for (int index = first_arg; index < argc; ++index)
         {
