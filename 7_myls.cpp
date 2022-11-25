@@ -8,14 +8,17 @@
 #include <dirent.h>
 #include <ctype.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
+#include <pwd.h>
+#include <grp.h>
+
 #define DEBUG(arg) \
-{}
-// do { fprintf(stderr, "%03d: %s = %d\n", __LINE__, #arg, arg); } while(0)
+do { fprintf(stderr, "%03d: %s = %d\n", __LINE__, #arg, arg); } while(0)
+
 #define DEBUGS(arg) \
-{}
-// do { fprintf(stderr, "%03d: %s = %s\n", __LINE__, #arg, arg); } while(0)
+do { fprintf(stderr, "%03d: %s = %s\n", __LINE__, #arg, arg); } while(0)
 
 /*
 
@@ -60,27 +63,136 @@ public:
 };
 
 static Mode mode;
-static char buf[4096];
+static char path[4096];
 static size_t length;
 
-void show(const dirent* entry)
+size_t connect_path(const char* name)
 {
-    if (entry->d_name[0] == '.' && !mode.check(Mode::ALL))
-        return;
+    size_t name_length = strlen(name);
+    name_length++;
 
-    const char *type = "undef";
-    if (entry->d_type == DT_DIR) type = "dir  ";
-    if (entry->d_type == DT_REG) type = "file ";
-    if (entry->d_type == DT_LNK) type = "link ";
+    path[length] = '/';
+    strcpy(path + length + 1, name);
+    length += name_length;
 
-    printf("%s: %s\n", type, entry->d_name);
+    return name_length;
 }
 
-void ls(const char* path, size_t number) // full path
+void disconnect_path(size_t name_length)
+{
+    length -= name_length;
+    path[length] = '\0';
+}
+
+void show(const char* name)
+{
+    assert(name != nullptr);
+
+    if (name[0] == '.' && !mode.check(Mode::ALL))
+        return;
+
+    if (mode.check(Mode::INODE))
+    {
+        size_t name_length = connect_path(name);
+
+        struct stat stat_buf;
+
+        int status = lstat(path, &stat_buf);
+        if (status == -1)
+        {
+            fprintf(stderr, "myls: cannot access %s: %s\n", path, strerror(errno));
+
+            disconnect_path(name_length);
+            return;
+        }
+
+        printf("%lu ", stat_buf.st_ino);
+
+        disconnect_path(name_length);
+    }
+
+    if (mode.check(Mode::LONG))
+    {
+        size_t name_length = connect_path(name);
+
+        struct stat stat_buf;
+
+        int status = lstat(path, &stat_buf);
+        if (status == -1)
+        {
+            fprintf(stderr, "myls: cannot access %s: %s\n", path, strerror(errno));
+
+            disconnect_path(name_length);
+            return;
+        }
+
+        char type = '-';
+        switch (stat_buf.st_mode & S_IFMT)
+        {
+            case S_IFDIR: type = 'd'; break;
+            case S_IFLNK: type = 'l'; break;
+
+            default:
+                type = '-';
+        }
+
+        putchar(type);
+
+        bool buff[9];
+        buff[0] = (stat_buf.st_mode & S_IRUSR);
+        buff[1] = (stat_buf.st_mode & S_IWUSR);
+        buff[2] = (stat_buf.st_mode & S_IXUSR);
+
+        buff[3] = (stat_buf.st_mode & S_IRGRP);
+        buff[4] = (stat_buf.st_mode & S_IWGRP);
+        buff[5] = (stat_buf.st_mode & S_IXGRP);
+
+        buff[6] = (stat_buf.st_mode & S_IROTH);
+        buff[7] = (stat_buf.st_mode & S_IWOTH);
+        buff[8] = (stat_buf.st_mode & S_IXOTH);
+
+        for (size_t i = 0; i < 9; i++)
+        {
+            if (buff[i])
+            {
+                char letter = '?';
+
+                switch (i % 3) {
+                    case 0: letter = 'r'; break;
+                    case 1: letter = 'w'; break;
+                    case 2: letter = 'x'; break;
+
+                    default: letter = '?';
+                }
+
+                putchar(letter);
+            }
+            else
+                putchar('-');
+        }
+
+        printf(" %lu", stat_buf.st_nlink);
+
+        const passwd* pwd = getpwuid(stat_buf.st_uid);
+        printf(" %s", pwd->pw_name);
+
+        const  group* grp = getgrgid(stat_buf.st_gid);
+        printf(" %s", grp->gr_name);
+
+        printf(" %5lu", stat_buf.st_size);
+        putchar(' ');
+
+        disconnect_path(name_length);
+    }
+
+    printf("%s\n", name);
+}
+
+void ls(size_t number) // full path
 {
     static size_t launch_time = 0;
 
-    if (number > 1 || mode.check(Mode::RECURSIVE))
+    if ((number > 1 || mode.check(Mode::RECURSIVE)) && !mode.check(Mode::DIRECTORY))
     {
         if (launch_time != 0)
             putchar('\n');
@@ -89,27 +201,17 @@ void ls(const char* path, size_t number) // full path
 
     launch_time++;
 
-    struct stat stat_buf;
-
-    int status = stat(path, &stat_buf);
-    if (status == -1)
+    if (mode.check(Mode::DIRECTORY))
     {
-        DEBUGS(path);
-        fprintf(stderr, "myls: cannot access %s: %s\n", path, strerror(errno));
+        // TODO: call view long description.
+        show("");
+
         return;
     }
-
-    // if (stat_buf.st_mode == S_IFREG)
-    // {
-    //     // show();
-    // }
-
-    DEBUG(status);
 
     DIR *dir = opendir(path);
     if (dir == nullptr)
     {
-        DEBUGS(path);
         fprintf(stderr, "myls: cannot access %s: %s\n", path, strerror(errno));
         return;
     }
@@ -119,7 +221,7 @@ void ls(const char* path, size_t number) // full path
     dirent* entry = nullptr;
     while ((entry = readdir(dir)) != nullptr)
     {
-        show(entry);
+        show(entry->d_name);
     }
 
     rewinddir(dir);
@@ -131,33 +233,15 @@ void ls(const char* path, size_t number) // full path
             if (entry->d_name[0] == '.' && !mode.check(Mode::ALL))
                 continue;
 
-            DEBUGS(entry->d_name);
-
-            size_t add_len = strlen(entry->d_name);
-
-            DEBUG(add_len);
-
             if (strcmp(entry->d_name, ".")  == 0 ||
                 strcmp(entry->d_name, "..") == 0)
                 return;
 
-            add_len++;
+            size_t name_length = connect_path(entry->d_name);
 
-            DEBUG(add_len);
-            DEBUGS(buf);
+            ls(2);
 
-            DEBUG(length);
-            buf[length] = '/';
-            DEBUGS(buf);
-            strcpy(buf + length + 1, entry->d_name);
-            DEBUGS(buf);
-            length += add_len;
-            DEBUGS(buf);
-
-            ls(buf, 2);
-
-            length -= add_len;
-            buf[length] = '\0';
+            disconnect_path(name_length);
         }
     }
 
@@ -198,20 +282,20 @@ int main(int argc, char **argv)
 
     if (argc == last_option)
     {
-        DEBUGS(buf);
-        strcpy(buf, ".");
+        // DEBUGS(buf);
+        strcpy(path, ".");
         length++;
-        DEBUGS(buf);
-        ls(buf, 1);
+        // DEBUGS(buf);
+        ls(1);
     }
     else {
         int first_arg = last_option;
         for (int index = first_arg; index < argc; ++index)
         {
-            strcpy(buf, argv[index]);
-            length = strlen(buf);
+            strcpy(path, argv[index]);
+            length = strlen(path);
 
-            ls(buf, argc - first_arg);
+            ls(argc - first_arg);
 
             if (index != argc - 1) putchar('\n');
         }
