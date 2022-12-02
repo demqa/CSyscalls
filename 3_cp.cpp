@@ -1,5 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#define DEBUG(arg) \
+do { fprintf(stderr, "%03d: %s = %d\n", __LINE__, #arg, arg); } while(0)
+
+#define DEBUGS(arg) \
+do { fprintf(stderr, "%03d: %s = %s\n", __LINE__, #arg, arg); } while(0)
 
 // flags
 // static class Mode
@@ -8,7 +16,51 @@
 //     force
 //     interactive
 // }
+class Mode
+{
+    unsigned int mode_;
 
+public:
+    enum Modes
+    {
+        VERBOSE     = 1 << 0,
+        FORCE       = 1 << 1,
+        INTERACTIVE = 1 << 2,
+    };
+
+    bool check(Modes mode) const
+    {
+        return mode_ & (unsigned int) mode;
+    };
+
+    void set(Modes mode)
+    {
+        mode_ |= (unsigned int) mode;
+    };
+};
+
+static char path[4096];
+static size_t length;
+
+size_t connect_path(const char* name)
+{
+    size_t name_length = strlen(name);
+    name_length++;
+
+    path[length] = '/';
+    strcpy(path + length + 1, name);
+    length += name_length;
+
+    return name_length;
+}
+
+void disconnect_path(size_t name_length)
+{
+    length -= name_length;
+    path[length] = '\0';
+}
+
+static Mode mode;
 // copy file from source to destination
 void copy(char *source, char *destination)
 {
@@ -36,10 +88,47 @@ int main(int argc, char **argv) {
 
     if (argc > 2)
     {
-        cp(argc - 1, argv + 1);
+        int c = -1;
+        int last_option = 1;
+
+        while ((c = getopt(argc, argv, "ifv")) != -1)
+        {
+            last_option = optind;
+            switch (c)
+            {
+                case 'i': mode.set(Mode::INTERACTIVE); break;
+                case 'f': mode.set(Mode::FORCE);       break;
+                case 'v': mode.set(Mode::VERBOSE);     break;
+
+                case '?':
+                default:
+                    return EXIT_FAILURE;
+                    fprintf(stderr, "mycp: getoption returned impossible symbol: %c\n", c);
+            }
+        }
+
+        int nargs = argc - last_option;
+        if (nargs < 2)
+        {
+            fprintf(stderr, "mycp: invalid number of arguments\n");
+            return EXIT_FAILURE;
+        }
+
+        // DEBUG(mode.check(Mode::INTERACTIVE));
+        // DEBUG(mode.check(Mode::FORCE));
+        // DEBUG(mode.check(Mode::VERBOSE));
+
+        // DEBUG(nargs);
+
+        // for (size_t index = last_option; index < argc; index++)
+        // {
+        //     DEBUGS(argv[index]);
+        // }
+
+        cp(nargs, argv + last_option);
     }
     else {
-        fprintf(stderr, "mycp: invalid usage\n");
+        fprintf(stderr, "mycp: invalid number of arguments\n");
         return EXIT_FAILURE;
     }
 }
