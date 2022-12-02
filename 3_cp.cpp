@@ -3,6 +3,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <sys/stat.h>
+
 #define DEBUG(arg) \
 do { fprintf(stderr, "%03d: %s = %d\n", __LINE__, #arg, arg); } while(0)
 
@@ -40,31 +42,35 @@ public:
 };
 
 static char path[4096];
-static size_t length;
+static size_t path_length = 0;
 
 size_t connect_path(const char* name)
 {
     size_t name_length = strlen(name);
     name_length++;
 
-    path[length] = '/';
-    strcpy(path + length + 1, name);
-    length += name_length;
+    path[path_length] = '/';
+    strcpy(path + path_length + 1, name);
+    path_length += name_length;
 
     return name_length;
 }
 
 void disconnect_path(size_t name_length)
 {
-    length -= name_length;
-    path[length] = '\0';
+    path_length -= name_length;
+    path[path_length] = '\0';
 }
 
 static Mode mode;
+
 // copy file from source to destination
 void copy(char *source, char *destination)
 {
-
+    if (mode.check(Mode::VERBOSE))
+    {
+        printf("mycp: '%s' -> '%s'\n", source, destination);
+    }
 }
 
 void cp(int nargs, char **args)
@@ -81,6 +87,33 @@ void cp(int nargs, char **args)
         // {
         //     copy(source, destination + '/' + source);
         // }
+
+        char *dest_dir = args[nargs - 1];
+
+        struct stat buf = {};
+        if (stat(dest_dir, &buf) < 0)
+        {
+            perror("mycp. stat error");
+            return;
+        }
+
+        if ((buf.st_mode & S_IFMT) != S_IFDIR)
+        {
+            perror("mycp. last argument is not a directory.");
+            return;
+        }
+
+        path_length = strlen(dest_dir);
+        strcpy(path, dest_dir);
+
+        for (int i = 0; i + 1 < nargs; i++)
+        {
+            int name_length = connect_path(args[i]);
+
+            copy(args[i], path);
+
+            disconnect_path(name_length);
+        }
     }
 }
 
