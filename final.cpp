@@ -154,7 +154,7 @@ size_t proceed_fd(int fd_num)
 
     // print_stat(&stat);
 
-    return size;
+    return stat.byte_count;
 }
 
 int main(int argc, char **argv)
@@ -162,16 +162,18 @@ int main(int argc, char **argv)
     int c = -1;
     int last_option = 1;
 
-    DEBUG(argc);
-    DEBUG(optind);
-    DEBUG(getpid());
+    // DEBUGS(argv[0]);
+
+    // DEBUG(argc);
+    // DEBUG(optind);
+    // DEBUG(getpid());
 
     while ((c = getopt(argc, argv, "d")) != -1)
     {
-        DEBUG(optind - last_option);
+        // DEBUG(optind - last_option);
         last_option = optind;
-        DEBUG(optind);
-        DEBUG(getpid());
+        // DEBUG(optind);
+        // DEBUG(getpid());
 
         switch (c)
         {
@@ -183,8 +185,8 @@ int main(int argc, char **argv)
                 return EXIT_FAILURE;
         }
 
-        DEBUG(optind);
-        DEBUG(getpid());
+        // DEBUG(optind);
+        // DEBUG(getpid());
     }
 
     last_option = optind;
@@ -231,7 +233,7 @@ int main(int argc, char **argv)
             return EXIT_FAILURE;
         }
 
-        DEBUG(last_option + 1);
+        // DEBUG(last_option + 1);
 
         status = execvp(argv[last_option], argv + last_option);
         if (status == -1)
@@ -250,40 +252,32 @@ int main(int argc, char **argv)
     //--------------------------------------------------------//
     // I am excited of this code working properly next commit //
     //--------------------------------------------------------//
-    //
-    // const int PAGESIZE = getpagesize();
-    // int        fd;
-    // char       *addr;
-    // fd = shm_open("bolts", O_RDWR | O_CREAT, 0777);
-    // if (fd == -1) {
-    //     fprintf(stderr, "Open failed : %s\n", strerror(errno));
-    //     exit(1);
-    // }
-    // if (lseek(fd, PAGESIZE, SEEK_SET) == -1) {
-    //     fprintf(stderr, "lseek: %s\n", strerror(errno));
-    //     exit(1);
-    // }
-    // addr = (char *)mmap(0, PAGESIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    // if (addr == (void *) -1) {
-    //     fprintf(stderr, "mmap failed:%s\n",strerror(errno));
-    //     exit(1);
-    // }
-    // shm_unlink("bolts");
+
+    size_t* sizes = (size_t *)mmap(nullptr, 2 * sizeof(size_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (sizes == (void *) -1) {
+        perror("wc: mmap failed.");
+        return EXIT_FAILURE;
+    }
 
     if (fork() == 0)
     {
-        size_t size = proceed_fd(fds_out[0]);
+        sizes[0] = proceed_fd(fds_out[0]);
         return 0;
     }
 
     if (fork() == 0)
     {
-        size_t size = proceed_fd(fds_err[0]);
+        sizes[1] = proceed_fd(fds_err[0]);
         return 0;
     }
 
     waitpid(-1, &status, 0);
+    waitpid(-1, &status, 0);
 
+    printf("out size = %lu\n", sizes[0]);
+    printf("err size = %lu\n", sizes[1]);
+
+    munmap(sizes, 2 * sizeof(size_t));
 
     return EXIT_SUCCESS;
 }
